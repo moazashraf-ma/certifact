@@ -1,0 +1,48 @@
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  margin: 0;
+
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* --- Global Component Styles --- */
+
+/* Card Styling */
+.card {
+  background-color: var(--card-bg);
+  border-color: var(--card-border-color);
+  box-shadow: 0 0.5rem 1rem var(--shadow-color);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  color: var(--text-color); 
+}
+
+.card-title, .card-text, .text-primary, .text-secondary {
+  color: var(--text-color) !important;
+}
+
+p, .text-muted {
+  color: var(--text-muted-color) !important;
+}
+
+/* Button Styling */
+.btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+.btn-primary:hover {
+  background-color: var(--primary-color-hover);
+  border-color: var(--primary-color-hover);
+}
+
+/* Alert Styling */
+.alert-success { background-color: var(--alert-success-bg); color: var(--alert-success-text); }
+.alert-warning { background-color: var(--alert-warning-bg); color: var(--alert-warning-text); }
+.alert-danger { background-color: var(--alert-danger-bg); color: var(--alert-danger-text); }
+
+/* This new class will use our theme variable for the background */
+.features-section {
+  background-color: var(--bg-secondary-color);
+  transition: background-color 0.3s ease; /* Add a smooth transition */
+}

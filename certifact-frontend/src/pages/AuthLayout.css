@@ -1,0 +1,139 @@
+.auth-wrapper {
+  display: flex;
+  /* Use the secondary background color for the page behind the form */
+  background-color: var(--bg-secondary-color);
+  min-height: calc(100vh - 150px); /* Adjust based on your header/footer height */
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  transition: background-color 0.3s ease;
+}
+
+.auth-container {
+  display: flex;
+  width: 100%;
+  max-width: 1000px;
+  /* The main container uses the card background color */
+  background-color: var(--card-bg);
+  color: var(--text-color); /* Set default text color for the container */
+  border-radius: 1.5rem;
+  box-shadow: 0 10px 40px var(--shadow-color);
+  overflow: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Left Visual Panel - This remains unchanged as it's a branding element */
+.auth-visual {
+  flex: 1;
+  background: linear-gradient(45deg, #0d6efd, #0d9afd);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem;
+  text-align: center;
+}
+
+.auth-visual h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.auth-visual p {
+  font-size: 1.1rem;
+  opacity: 0.9;
+  /* Ensure this text is always white */
+  color: #ffffff !important;
+}
+
+/* Right Form Panel */
+.auth-form-container {
+  flex: 1;
+  padding: 3.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.auth-form-container h2 {
+  font-weight: 700;
+  margin-bottom: 2rem;
+  /* Use the main text color variable */
+  color: var(--text-color);
+}
+
+.input-group-with-icon {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.input-group-with-icon .form-control {
+  padding-left: 2.75rem;
+  height: 50px;
+  border-radius: 0.5rem;
+  /* Use theme variables for the input fields */
+  background-color: var(--bg-secondary-color);
+  border: 1px solid var(--card-border-color);
+  color: var(--text-color);
+  transition: border-color 0.2s, background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Update placeholder text color for dark mode */
+[data-theme='dark'] .input-group-with-icon .form-control::placeholder {
+  color: var(--text-muted-color);
+  opacity: 0.8;
+}
+
+.input-group-with-icon .form-control:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 25%, transparent);
+}
+
+.input-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  /* Use the muted text color for icons */
+  color: var(--text-muted-color);
+  pointer-events: none;
+}
+
+.password-toggle-icon {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: var(--text-muted-color);
+}
+
+.auth-button {
+  width: 100%;
+  padding: 0.8rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 50px;
+}
+
+.auth-switch-link {
+  text-align: center;
+  margin-top: 1.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+  .auth-visual {
+    display: none;
+  }
+  .auth-form-container {
+    padding: 2.5rem;
+  }
+}

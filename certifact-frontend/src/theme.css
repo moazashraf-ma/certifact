@@ -1,0 +1,113 @@
+/* src/theme.css */
+
+/* 1. Default Light Theme Variables */
+:root {
+  --font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  
+  /* Primary Colors */
+  --primary-color: #0d6efd;
+  --primary-color-hover: #0a58ca;
+  
+  /* Background Colors */
+  --bg-color: #ffffff;
+  --bg-secondary-color: #f8f9fa;
+
+  /* Text Colors */
+  --text-color: #212529;
+  --text-muted-color: #6c757d;
+  
+  /* Card and Shadow */
+  --card-bg: #ffffff;
+  --card-border-color: rgba(0, 0, 0, 0.125);
+  --shadow-color: rgba(0, 0, 0, 0.1);
+
+  /* Alerts */
+  --alert-success-bg: #d1e7dd;
+  --alert-success-text: #0f5132;
+  --alert-warning-bg: #fff3cd;
+  --alert-warning-text: #664d03;
+  --alert-danger-bg: #f8d7da;
+  --alert-danger-text: #842029;
+}
+
+/* 2. Dark Theme Overrides */
+[data-theme='dark'] {
+  /* Primary Colors */
+  --primary-color: #3b82f6;
+  --primary-color-hover: #60a5fa;
+
+  /* Background Colors */
+  --bg-color: #121212;
+  --bg-secondary-color: #1e1e1e;
+
+  /* Text Colors */
+  --text-color: #e0e0e0;
+  --text-muted-color: #a0a0a0;
+
+  /* Card and Shadow */
+  --card-bg: #2a2a2a;
+  --card-border-color: rgba(255, 255, 255, 0.15);
+  --shadow-color: rgba(0, 0, 0, 0.4);
+
+  /* Alerts */
+  --alert-success-bg: #0f5132;
+  --alert-success-text: #d1e7dd;
+  --alert-warning-bg: #664d03;
+  --alert-warning-text: #fff3cd;
+  --alert-danger-bg: #842029;
+  --alert-danger-text: #f8d7da;
+
+  /* Rules for Bootstrap components in dark mode */
+  .list-group-item {
+    background-color: var(--card-bg);
+    border-color: var(--card-border-color);
+  }
+
+  .card-header {
+    background-color: transparent;
+    border-bottom-color: var(--card-border-color);
+    color: var(--text-color);
+  }
+
+
+  /* --- Accordion Theming for Help Page --- */
+  .accordion-item {
+    background-color: var(--card-bg);
+    border-color: var(--card-border-color);
+  }
+
+  .accordion-button {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+  }
+
+  /* Style for the button when the accordion item is open */
+  .accordion-button:not(.collapsed) {
+    background-color: var(--bg-secondary-color);
+    color: var(--text-color);
+    box-shadow: none; /* Remove the default blue shadow on open */
+  }
+
+  .accordion-body {
+    color: var(--text-color);
+  }
+
+  /* Invert the color of the default Bootstrap chevron icon to make it white */
+  .accordion-button::after {
+    filter: invert(1) grayscale(100%) brightness(200%);
+  }
+
+  /* Code Block Theming */
+  pre {
+    background-color: var(--bg-color); /* Use the main dark background */
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--card-border-color);
+    white-space: pre-wrap; /* Ensure long lines wrap */
+    word-break: break-all;
+  }
+
+  pre code {
+    color: var(--text-muted-color);
+  }
+}

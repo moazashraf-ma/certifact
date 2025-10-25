@@ -1,0 +1,6 @@
+certifact-backend/model/
+venv/
+__pycache__/
+models/
+node_modules/
+.env
