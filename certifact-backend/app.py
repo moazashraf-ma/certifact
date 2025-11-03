@@ -1,5 +1,5 @@
-import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+import firebase_admin
+from firebase_admin import credentials, auth
 from flask import Flask, request, jsonify, send_from_directory,Response
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
@@ -9,20 +9,22 @@ from bson import ObjectId
 from bson.errors import InvalidId
 import datetime
 import requests
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import uuid
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-from tensorflow.keras.utils import get_file
 from tensorflow.keras.preprocessing import image as keras_image
+from tensorflow.keras import backend as K  # <-- ADDED
 import cv2
 import threading
 import time
 import albumentations as A
 from mtcnn import MTCNN
-from fpdf import FPDF
-from report_generator import generate_analysis_report
-
+from fpdf import FPDF 
+from report_generator import generate_analysis_report 
+import gc # <-- ADDED
 
 # ================== SETUP ==================
 app = Flask(__name__)
@@ -35,6 +37,15 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["JWT_SECRET_KEY"] = "80d0d67d6c98cdab56631b7a352a3ce9073a2e68e5150c9db52791e750fd265c"
 jwt = JWTManager(app)
 bcrypt = Bcrypt(app)
+
+# --- ADD FIREBASE ADMIN SDK INITIALIZATION ---
+try:
+    cred = credentials.Certificate("serviceAccountKey.json") # Path to your key
+    firebase_admin.initialize_app(cred)
+    print("✅ Firebase Admin SDK initialized successfully!")
+except Exception as e:
+    print(f"🔥 Error initializing Firebase Admin SDK: {e}")
+
 
 # ================== MONGODB CONNECTION ==================
 MONGO_URI = "mongodb+srv://mohsin1:mohsin12@certi-fact-db.xnw07ls.mongodb.net/certifact?retryWrites=true&w=majority"
@@ -74,32 +85,17 @@ def download_model(url, path, name):
 download_model(IMAGE_MODEL_URL, IMAGE_MODEL_PATH, "Image")
 download_model(VIDEO_MODEL_URL, VIDEO_MODEL_PATH, "Video")
 
-# Initialize variables
+# --- MODIFIED: Initialize models as None ---
+# Models will be loaded on the first request
 image_model = None
 video_model = None
 mtcnn_detector = None
 
-# Load the models safely
-try:
-    image_model = load_model(IMAGE_MODEL_PATH)
-    print("✅ Image model loaded successfully!")
-except Exception as e:
-    print(f"🔥 Error loading image model: {e}")
-    image_model = None
+# --- ADDED: Threading locks for safe lazy-loading ---
+image_model_lock = threading.Lock()
+video_model_lock = threading.Lock() # This will protect both video_model and mtcnn
 
-try:
-    video_model = load_model(VIDEO_MODEL_PATH)
-    print("✅ Video model loaded successfully!")
-except Exception as e:
-    print(f"🔥 Error loading video model: {e}")
-    video_model = None
-
-# Load MTCNN face detector
-try: 
-    mtcnn_detector = MTCNN()
-    print("✅ MTCNN face detector loaded successfully!")
-except Exception as e:
-    print(f"🔥 Error loading MTCNN model: {e}")
+print("✅ Server started. Models will be lazy-loaded on first request.")
 
 
 # ================== AUGMENTATION LOGIC ==================
@@ -114,7 +110,7 @@ augmentation_pipeline = A.Compose([
 ])
 
 # ================== VIDEO PROCESSING HELPERS ==================
-
+# (These functions are unchanged)
 def crop_video_to_face(in_path, out_path, detector):
     cap = None
     w = None
@@ -133,20 +129,13 @@ def crop_video_to_face(in_path, out_path, detector):
             frame_count += 1
             processed_frame = frame # Default to original frame
             
-            # Detect faces
             faces = detector.detect_faces(frame)
             
             if faces:
-                # Get the bounding box of the first (and likely only) face
                 x, y, width, height = faces[0]['box']
-                # Add padding and ensure coordinates are within frame bounds
                 x1, y1 = max(0, x - 20), max(0, y - 20)
                 x2, y2 = min(frame.shape[1], x + width + 20), min(frame.shape[0], y + height + 20)
-                
-                # Crop the face
                 cropped_face = frame[y1:y2, x1:x2]
-                
-                # Resize cropped face back to the original video dimensions for consistency
                 processed_frame = cv2.resize(cropped_face, original_size)
 
             w.write(processed_frame)
@@ -185,13 +174,12 @@ def augment_video(in_path, out_path, transform):
             cap.release()
         if w and w.isOpened():
             w.release()
-#=================server health checking logic -ma ======================#
-@app.route('/')
-def index():
-    return jsonify({"status": "Server is Running", "message": "API is operational."}), 200
 
-# ================== WORKER FUNCTION ==================
+# ================== WORKER FUNCTION (MODIFIED) ==================
 def process_media(job_id, file_path, media_type, user_id):
+    # --- MODIFIED: Bring model variables into local scope ---
+    global image_model, video_model, mtcnn_detector
+
     print(f"🚀 Starting background processing for job: {job_id}")
     jobs_collection.update_one(
         {"_id": ObjectId(job_id)},
@@ -200,12 +188,42 @@ def process_media(job_id, file_path, media_type, user_id):
     
     face_cropped_path = None
     final_processed_path = None
+    
+    # --- This is how you would "unload" the model if you really wanted to ---
+    # This example code *doesn't* unload, it keeps the model in memory.
+    # To unload, you would add this code block in the `finally` section:
+    #
+    # finally:
+    #    if media_type == 'image':
+    #        print("Unloading image model...")
+    #        del image_model
+    #        image_model = None
+    #    elif media_type == 'video':
+    #        print("Unloading video models...")
+    #        del video_model
+    #        del mtcnn_detector
+    #        video_model = None
+    #        mtcnn_detector = None
+    #    K.clear_session()
+    #    gc.collect()
 
     try:
         is_deepfake, confidence = (False, 0.0)
         thumbnail_filename = None
 
-        if media_type == 'image' and image_model:
+        if media_type == 'image':
+            # --- MODIFIED: Thread-safe lazy-loading ---
+            with image_model_lock:
+                if image_model is None:
+                    try:
+                        print("🧠 [Lazy-Loading] Loading image model...")
+                        image_model = load_model(IMAGE_MODEL_PATH)
+                        print("✅ Image model loaded successfully!")
+                    except Exception as e:
+                        print(f"🔥 Error loading image model: {e}")
+                        raise e # Fail the job if model can't load
+            
+            # --- Original logic continues... ---
             thumbnail_filename = os.path.basename(file_path)
             img = keras_image.load_img(file_path, target_size=(150, 150))
             img_array = keras_image.img_to_array(img)
@@ -214,7 +232,27 @@ def process_media(job_id, file_path, media_type, user_id):
             is_deepfake = bool(pred > 0.5)
             confidence = float(pred if is_deepfake else 1 - pred)
 
-        elif media_type == 'video' and video_model and mtcnn_detector:
+        elif media_type == 'video':
+            # --- MODIFIED: Thread-safe lazy-loading ---
+            with video_model_lock:
+                if video_model is None:
+                    try:
+                        print("🧠 [Lazy-Loading] Loading video model...")
+                        video_model = load_model(VIDEO_MODEL_PATH)
+                        print("✅ Video model loaded successfully!")
+                    except Exception as e:
+                        print(f"🔥 Error loading video model: {e}")
+                        raise e
+                if mtcnn_detector is None:
+                    try:
+                        print("🧠 [Lazy-Loading] Loading MTCNN face detector...")
+                        mtcnn_detector = MTCNN()
+                        print("✅ MTCNN face detector loaded successfully!")
+                    except Exception as e:
+                        print(f"🔥 Error loading MTCNN model: {e}")
+                        raise e
+
+            # --- Original logic continues... ---
             try:
                 cap = cv2.VideoCapture(file_path)
                 success, frame = cap.read()
@@ -226,22 +264,18 @@ def process_media(job_id, file_path, media_type, user_id):
             except Exception as thumb_e:
                 print(f"🔥 WARNING: Could not create thumbnail: {thumb_e}")
             
-            # --- DEFINE TEMP FILE PATHS ---
             base, ext = os.path.splitext(file_path)
             face_cropped_path = f"{base}_face_cropped{ext}"
             final_processed_path = f"{base}_aug{ext}"
 
-            # --- STEP 1: CROP VIDEO TO FACE ---
             print(f"🛠️ [1/3] Cropping faces from video: {file_path}")
             crop_video_to_face(file_path, face_cropped_path, mtcnn_detector)
 
-            # --- STEP 2: AUGMENT THE FACE-CROPPED VIDEO ---
             print(f"🛠️ [2/3] Augmenting face-cropped video: {face_cropped_path}")
             augment_video(face_cropped_path, final_processed_path, augmentation_pipeline)
             
-            # --- STEP 3: ANALYZE THE FINAL PROCESSED VIDEO ---
             print(f"🔬 [3/3] Analyzing final video: {final_processed_path}")
-            cap = cv2.VideoCapture(final_processed_path) # <-- MODIFIED: Use the final processed video
+            cap = cv2.VideoCapture(final_processed_path)
             frames = []
             frame_count = 0
             while True:
@@ -249,8 +283,6 @@ def process_media(job_id, file_path, media_type, user_id):
                 if not ret: break
                 frame_count += 1
                 if frame_count % 15 == 0:
-                    # The frames are already the correct size from the cropping step,
-                    # but resizing again ensures consistency for the model.
                     frame = cv2.resize(frame, (150, 150))
                     frames.append(frame)
             cap.release()
@@ -302,6 +334,10 @@ def process_media(job_id, file_path, media_type, user_id):
                 print(f"🔥 WARNING: Could not delete temp file {final_processed_path}: {clean_e}")
 
 # ================== API ROUTES ==================
+@app.route('/')
+def index():
+    return jsonify({"status": "Server is Running", "message": "API is operational."}), 200
+
 @app.route('/uploads/<filename>')
 def serve_uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
@@ -334,6 +370,51 @@ def register():
     
     return jsonify({"message": "User registered successfully"}), 201
 
+# --- ADD NEW GOOGLE SIGN-IN ROUTE ---
+@app.route('/api/auth/google-signin', methods=['POST'])
+def google_signin():
+    data = request.get_json()
+    token = data.get('token')
+    if not token:
+        return jsonify({"error": "No token provided"}), 400
+
+    try:
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token['uid']
+        email = decoded_token.get('email')
+        name = decoded_token.get('name')
+        picture = decoded_token.get('picture')
+
+        if not email:
+            return jsonify({"error": "Email not available from Google Sign-In"}), 400
+
+        user = users_collection.find_one_and_update(
+            {"email": email},
+            {
+                "$setOnInsert": {
+                    "email": email,
+                    "created_at": datetime.datetime.now(datetime.UTC)
+                },
+                "$set": {
+                    "name": name,
+                    "firebase_uid": uid,
+                    "profile_picture": picture
+                }
+            },
+            upsert=True,
+            return_document=True
+        )
+
+        access_token = create_access_token(identity=str(user['_id']))
+        return jsonify(access_token=access_token)
+
+    except auth.InvalidIdTokenError:
+        return jsonify({"error": "Invalid Firebase token"}), 401
+    except Exception as e:
+        print(f"🔥 An error occurred during Google sign-in: {e}")
+        return jsonify({"error": "An internal server error occurred"}), 500
+
+
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -341,7 +422,7 @@ def login():
     password = data.get('password')
     user = users_collection.find_one({"email": email})
 
-    if user and bcrypt.check_password_hash(user['password_hash'], password):
+    if user and "password_hash" in user and bcrypt.check_password_hash(user['password_hash'], password):
         access_token = create_access_token(identity=str(user['_id']))
         return jsonify(access_token=access_token)
 
@@ -484,7 +565,6 @@ def get_dashboard_stats():
 def download_report(result_id):
     current_user_id = get_jwt_identity()
     try:
-        # 1. Fetch the analysis result from the database, ensuring user has permission
         result = results_collection.find_one({
             "_id": ObjectId(result_id), 
             "user_id": ObjectId(current_user_id)
@@ -493,13 +573,9 @@ def download_report(result_id):
         if not result:
             return jsonify({"error": "Analysis result not found or permission denied"}), 404
         
-        # 2. Call your report generator to create the PDF content in memory
         pdf_content = generate_analysis_report(result)
-        
-        # 3. Create a standardized filename as per your requirements
         filename = f"CF_Report_{result_id}.pdf"
         
-        # 4. Send the PDF file back to the user
         return Response(
             pdf_content,
             mimetype="application/pdf",
