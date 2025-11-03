@@ -1,3 +1,4 @@
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 from flask import Flask, request, jsonify, send_from_directory,Response
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
@@ -8,19 +9,19 @@ from bson.errors import InvalidId
 import datetime
 import os
 import requests
-from tensorflow.keras.utils import get_file
 import uuid
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
+from tensorflow.keras.utils import get_file
 from tensorflow.keras.preprocessing import image as keras_image
 import cv2
 import threading
 import time
 import albumentations as A
 from mtcnn import MTCNN
-from fpdf import FPDF 
-from report_generator import generate_analysis_report 
+from fpdf import FPDF
+from report_generator import generate_analysis_report
 
 # ================== SETUP ==================
 app = Flask(__name__)
@@ -42,54 +43,62 @@ jobs_collection = db["jobs"]
 results_collection = db["results"]
 users_collection = db["users"]
 
-# --- Model Configuration ---
-# Your Hugging Face model direct download links
-IMAGE_MODEL_URL = "https://huggingface.co/moazashraf-ma/certifact-models/resolve/main/best_finetuned_xception.h5"
-VIDEO_MODEL_URL = "https://huggingface.co/moazashraf-ma/certifact-models/resolve/main/deepfake_detector_v6_final_stable.h5"
+# ================== LOAD MODELS ==================
+# Directory for local model storage
+MODEL_DIR = 'model'
+os.makedirs(MODEL_DIR, exist_ok=True)
 
-# --- Model Loading Logic ---
-def load_model_from_url(url, cache_subdir, file_name, custom_objects=None):
-    """Downloads a model from a URL and loads it using Keras."""
-    print(f"Attempting to download and load model from: {url}")
-    try:
-        # Use get_file to download the model file. It caches the file locally.
-        model_path = get_file(
-            fname=file_name,
-            origin=url,
-            cache_subdir=cache_subdir,
-            file_hash=None,  # You can add a hash for security if you know it
-            extract=False,
-            archive_format='h5' # Hint that it is an HDF5 model file
-        )
+# Hugging Face model URLs
+IMAGE_MODEL_URL = 'https://huggingface.co/moazashraf-ma/certifact-models/resolve/main/best_finetuned_xception.h5'
+VIDEO_MODEL_URL = 'https://huggingface.co/moazashraf-ma/certifact-models/resolve/main/deepfake_detector_v6_final_stable.h5'
 
-        # load_model needs the local path returned by get_file
-        model = load_model(model_path, custom_objects=custom_objects)
-        print(f"✅ Model '{file_name}' loaded successfully from URL.")
-        return model
-    except Exception as e:
-        print(f"🔥 Error loading model from URL {url}: {e}")
-        return None
+# Local paths where models will be saved
+IMAGE_MODEL_PATH = os.path.join(MODEL_DIR, 'best_finetuned_xception.h5')
+VIDEO_MODEL_PATH = os.path.join(MODEL_DIR, 'deepfake_detector_v6_final_stable.h5')
 
-# The global variables that hold the models
-# (assuming these are called at the beginning of your Flask app/process)
-IMAGE_CLASSIFIER_MODEL = load_model_from_url(
-    IMAGE_MODEL_URL, 
-    cache_subdir='certifact_models', 
-    file_name='image_model.h5'
-)
+# Download models from Hugging Face if not already downloaded
+def download_model(url, path, name):
+    if not os.path.exists(path):
+        try:
+            print(f"⬇️ Downloading {name} model from Hugging Face...")
+            response = requests.get(url)
+            response.raise_for_status()  # Ensure the download was successful
+            with open(path, 'wb') as f:
+                f.write(response.content)
+            print(f"✅ {name} model downloaded successfully!")
+        except Exception as e:
+            print(f"🔥 Error downloading {name} model: {e}")
 
-# You may need to define custom objects for your deepfake model if it uses custom layers/losses.
-# If your model has custom objects, pass them here:
-# CUSTOM_OBJECTS = {"CustomLayerName": CustomLayerClass}
-VIDEO_DETECTOR_MODEL = load_model_from_url(
-    VIDEO_MODEL_URL, 
-    cache_subdir='certifact_models', 
-    file_name='video_model.h5'
-    # , custom_objects=CUSTOM_OBJECTS # Uncomment if needed
-)
-# Ensure the MTCNN detector is loaded if it's still needed
-# MTCNN_DETECTOR = MTCNN() 
-print("✅ MTCNN face detector loaded successfully!") # Keep this line, as MTCNN itself is just a class instantiation
+# Fetch models if missing
+download_model(IMAGE_MODEL_URL, IMAGE_MODEL_PATH, "Image")
+download_model(VIDEO_MODEL_URL, VIDEO_MODEL_PATH, "Video")
+
+# Initialize variables
+image_model = None
+video_model = None
+mtcnn_detector = None
+
+# Load the models safely
+try:
+    image_model = load_model(IMAGE_MODEL_PATH)
+    print("✅ Image model loaded successfully!")
+except Exception as e:
+    print(f"🔥 Error loading image model: {e}")
+    image_model = None
+
+try:
+    video_model = load_model(VIDEO_MODEL_PATH)
+    print("✅ Video model loaded successfully!")
+except Exception as e:
+    print(f"🔥 Error loading video model: {e}")
+    video_model = None
+
+# Load MTCNN face detector
+try: 
+    mtcnn_detector = MTCNN()
+    print("✅ MTCNN face detector loaded successfully!")
+except Exception as e:
+    print(f"🔥 Error loading MTCNN model: {e}")
 
 
 # ================== AUGMENTATION LOGIC ==================
@@ -175,8 +184,7 @@ def augment_video(in_path, out_path, transform):
             cap.release()
         if w and w.isOpened():
             w.release()
-
-# ============= server health check logic -ma =============#
+#=================server health checking logic -ma ======================#
 @app.route('/')
 def index():
     return jsonify({"status": "Server is Running", "message": "API is operational."}), 200
@@ -506,6 +514,6 @@ def download_report(result_id):
 
 # ================== RUN SERVER ==================
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
+    print(f"🚀 Starting CertiFact server on port {port}...")
     app.run(host="0.0.0.0", port=port)
