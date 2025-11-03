@@ -1,3 +1,4 @@
+import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 from flask import Flask, request, jsonify, send_from_directory,Response
 from flask_cors import CORS
@@ -7,7 +8,6 @@ from pymongo import MongoClient
 from bson import ObjectId
 from bson.errors import InvalidId
 import datetime
-import os
 import requests
 import uuid
 import numpy as np
@@ -22,6 +22,7 @@ import albumentations as A
 from mtcnn import MTCNN
 from fpdf import FPDF
 from report_generator import generate_analysis_report
+
 
 # ================== SETUP ==================
 app = Flask(__name__)
