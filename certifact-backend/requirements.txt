@@ -1,5 +1,6 @@
 absl-py==2.3.0
 astunparse==1.6.3
+albumentations
 blinker==1.8.2
 certifi==2025.6.15
 charset-normalizer==3.4.2
